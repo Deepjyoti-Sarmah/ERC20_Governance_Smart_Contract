@@ -114,4 +114,126 @@ contract MyGovernorTest is Test {
         governor.propose(targets, values, calldatas, "test proposal");
         vm.stopPrank();
     }
+
+    function testProposalState() public {
+        uint256 valueToStore = 999;
+        string memory description = "store 999 in Box";
+        bytes memory encodedFunctionCalls = abi.encodeWithSignature("store(uint256)", valueToStore);
+
+        values.push(0);
+        calldatas.push(encodedFunctionCalls);
+        targets.push(address(vault));
+
+        // Propose to the DAO
+        uint256 proposalId = governor.propose(targets, values, calldatas, description);
+
+        // Check the initial state
+        assertEq(uint256(governor.state(proposalId)), 0, "Initial state is not Pending");
+
+        // Fast forward time to surpass the voting delay
+        vm.warp(block.timestamp + VOTING_DELAY + 1);
+        vm.roll(block.number + VOTING_DELAY + 1);
+
+        // Check the state after the voting delay
+        assertEq(uint256(governor.state(proposalId)), 1, "State after voting delay is not Active");
+    }
+
+    function testOnlyProposerCanPropose() public {
+        address nonProposer = makeAddr("nonProposer");
+        vm.startPrank(nonProposer);
+        vm.expectRevert();
+        governor.propose(targets, values, calldatas, "test proposal");
+        vm.stopPrank();
+    }
+
+    function testOnlyExecutorCanExecute() public {
+        address nonExecutor = makeAddr("nonExecutor");
+        vm.startPrank(nonExecutor);
+        vm.expectRevert();
+        governor.execute(targets, values, calldatas, "test proposal");
+        vm.stopPrank();
+    }
+
+    function testUserCannotVoteTwiceOnSameProposal() public {
+        uint256 valueToStore = 888;
+        string memory description = "store 1 in Box";
+        bytes memory encodedFunctionCalls = abi.encodeWithSignature("store(uint256)", valueToStore);
+
+        values.push(0);
+        calldatas.push(encodedFunctionCalls);
+        targets.push(address(vault));
+
+        uint256 proposalId = governor.propose(targets, values, calldatas, description);
+
+        vm.warp(block.timestamp + VOTING_DELAY + 1);
+        vm.roll(block.number + VOTING_DELAY + 1);
+
+        string memory reason = "cuz blue frog is cool";
+        uint8 voteWay = 1; //voting yes
+
+        vm.prank(USER);
+        governor.castVoteWithReason(proposalId, voteWay, reason);
+
+        vm.expectRevert();
+        governor.castVoteWithReason(proposalId, voteWay, reason);
+        vm.stopPrank();
+    }
+
+    // function testProposalCanBeCancelled() public {
+    //     uint256 valueToStore = 888;
+    //     string memory description = "store 1 in Box";
+    //     bytes memory encodedFunctionCalls = abi.encodeWithSignature("store(uint256)", valueToStore);
+
+    //     values.push(0);
+    //     calldatas.push(encodedFunctionCalls);
+    //     targets.push(address(vault));
+
+    //     uint256 proposalId = governor.propose(targets, values, calldatas, description);
+
+    //     vm.warp(block.timestamp + VOTING_DELAY + 1);
+    //     vm.roll(block.number + VOTING_DELAY + 1);
+
+    //     string memory reason = "cuz blue frog is cool";
+    //     uint8 voteWay = 1; //voting yes
+
+    //     vm.prank(USER);
+    //     governor.castVoteWithReason(proposalId, voteWay, reason);
+
+    //     vm.expectRevert();
+    //     governor.cancel(proposalId);
+    //     vm.stopPrank();
+    // }
+
+    function testProposalCanBeExecuted() public {
+        uint256 valueToStore = 888;
+        string memory description = "store 1 in Box";
+        bytes memory encodedFunctionCalls = abi.encodeWithSignature("store(uint256)", valueToStore);
+
+        values.push(0);
+        calldatas.push(encodedFunctionCalls);
+        targets.push(address(vault));
+
+        uint256 proposalId = governor.propose(targets, values, calldatas, description);
+
+        // Increase the voting delay and period
+        uint256 increasedDelay = VOTING_DELAY * 2;
+        uint256 increasedPeriod = VOTING_PERIOD * 2;
+
+        vm.warp(block.timestamp + increasedDelay + 1);
+        vm.roll(block.number + increasedDelay + 1);
+
+        string memory reason = "cuz blue frog is cool";
+        uint8 voteWay = 1; //voting yes
+
+        vm.prank(USER);
+        governor.castVoteWithReason(proposalId, voteWay, reason);
+
+        vm.warp(block.timestamp + increasedPeriod + 1);
+        vm.roll(block.number + increasedPeriod + 1);
+
+        bytes32 descriptionHash = keccak256(abi.encodePacked(description));
+        governor.execute(targets, values, calldatas, descriptionHash);
+
+        assert(vault.getNumber() == valueToStore);
+    }
 }
