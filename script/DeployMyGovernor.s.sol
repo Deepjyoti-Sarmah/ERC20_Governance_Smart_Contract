@@ -11,10 +11,12 @@ contract DeployMyGovernor {
     VotingToken public votingToken;
     TimeLock public timeLock;
 
-    function setup() public {
+    function run() public {
         votingToken = new VotingToken();
         timeLock = new TimeLock(3600, new address[](0), new address[](0));
         myGovernor = new MyGovernor(votingToken, timeLock);
         console.log("MyGovernor deployed to:", address(myGovernor));
     }
 }
+
+//  MyGovernor deployed to: 0x238213078DbD09f2D15F4c14c02300FA1b2A81BB
